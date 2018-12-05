@@ -183,8 +183,6 @@ namespace SkClientMNG
             }
             return true;
         }
-
-
         /// <summary>
         /// Nén đối tượng thành mảng byte[]
         /// </summary>
