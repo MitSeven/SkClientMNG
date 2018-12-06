@@ -18,6 +18,7 @@ namespace SkClientMNG
         public bool IsSKconnected { get; private set; } = false;
         public delegate void Changed(object T, ModeEventArgs e);
         public event Changed ChangeEvent;
+        private Thread waitrespond;
         public object ExMessage { get; private set; }
         public string IpClient
         {
@@ -39,7 +40,6 @@ namespace SkClientMNG
                 return IP_current;
             }
         }
-        private Thread waitrespond;
         public void ConnectToServer(string IPServer)
         {
             if (!ClientSocket.Connected)
@@ -61,7 +61,7 @@ namespace SkClientMNG
             if (isOK)
             {
                 IsSKconnected = true;
-                ExMessage = "Connected!";
+                ExMessage = "Server connected!";
                 ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
                 waitrespond = new Thread(new ThreadStart(() =>
                 {
@@ -99,43 +99,19 @@ namespace SkClientMNG
                 ClientSocket.Close();
             }
             catch { }
-            ExMessage = "Connect closed!";
-            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
             try
             {
                 waitrespond.Abort();
             }
             catch { }
-        }
-        
-        public bool Send(object Object)
-        {
-               return SendString(new KeyValuePair<TypeSend, object>(TypeSend.Object,Object));
-        }
-        /// <summary>
-        /// Sends a string to the server with ASCII encoding.
-        /// </summary>
-        private bool SendString(KeyValuePair<TypeSend,object> keyValuePair)
-        {
-            try
-            {
-                byte[] buffer = SerializeData(keyValuePair);
-                ClientSocket.Send(buffer, 0, buffer.Length, SocketFlags.None);
-                return true;
-            }
-            catch
-            {
-                IsSKconnected = false;
-                ExMessage = "Cannot send to server!";
-                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
-                return false;
-            }
+            ExMessage = "Connect closed!";
+            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
         }
         private object ReceiveResponse
         {
             get
             {
-                var buffer = new byte[1024 * 32000];
+                byte[] buffer = new byte[1024 * 32000];
                 int received = 0;
                 try
                 {
@@ -152,17 +128,13 @@ namespace SkClientMNG
                 }
                 var data = new byte[received];
                 Array.Copy(buffer, data, received);
-                object text=null;
+                object text = null;
                 try
                 {
                     text = DeserializeData(data);
                 }
                 catch { }
-                if (text == null)
-                {
-                    return "Data received empty!";
-                }
-                return CommandEx(text);
+                return text == null ? "Data received empty!" : CommandEx(text);
             }
         }
         private object CommandEx(object command)
@@ -195,13 +167,26 @@ namespace SkClientMNG
                 return command;
             }
         }
-
-
-        /// <summary>
-        /// Nén đối tượng thành mảng byte[]
-        /// </summary>
-        /// <param name="o"></param>
-        /// <returns></returns>
+        public bool Send(object Object)
+        {
+               return SendString(new KeyValuePair<TypeSend, object>(TypeSend.Object,Object));
+        }
+        private bool SendString(KeyValuePair<TypeSend,object> keyValuePair)
+        {
+            try
+            {
+                byte[] buffer = SerializeData(keyValuePair);
+                ClientSocket.Send(buffer, 0, buffer.Length, SocketFlags.None);
+                return true;
+            }
+            catch
+            {
+                IsSKconnected = false;
+                ExMessage = "Cannot send to server!";
+                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerError));
+                return false;
+            }
+        }
         private byte[] SerializeData(Object o)
         {
             try
@@ -218,12 +203,6 @@ namespace SkClientMNG
                 return new byte[0];
             }
         }
-
-        /// <summary>
-        /// Giải nén mảng byte[] thành đối tượng object
-        /// </summary>
-        /// <param name="theByteArray"></param>
-        /// <returns></returns>
         private object DeserializeData(byte[] theByteArray)
         {
             if (theByteArray.Length == 0)
@@ -248,11 +227,6 @@ namespace SkClientMNG
                 }
             }
         }
-        /// <summary>
-        /// Lấy ra IP V4 của card mạng đang dùng
-        /// </summary>
-        /// <param name="_type"></param>
-        /// <returns></returns>
         private string GetLocalIPv4(NetworkInterfaceType _type)
         {
             string output = "";
@@ -271,7 +245,6 @@ namespace SkClientMNG
             }
             return output;
         }
-
     }
     public class ModeEventArgs
     {
@@ -295,5 +268,6 @@ namespace SkClientMNG
     {
         Exit,
         Respond,
+        Received,
     }
 }
