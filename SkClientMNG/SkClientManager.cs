@@ -1,9 +1,11 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Threading;
 
 namespace SkClientMNG
 {
@@ -12,10 +14,32 @@ namespace SkClientMNG
     {
         public static Socket ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         public bool IsSKconnected { get; private set; } = false;
-        public delegate void Changed(object T);
+        public delegate void Changed(object T, ModeEventArgs e);
         public event Changed ChangeEvent;
-        public object ExMessage;
-        public bool ConnectToServer(string IPServer, int Timeout)
+        public object ExMessage { get; private set; }
+        public string IpClient
+        {
+            get
+            {
+                string IP_current;
+                try
+                {
+                    IP_current = GetLocalIPv4(NetworkInterfaceType.Ethernet);
+                    if (string.IsNullOrEmpty(IP_current))
+                    {
+                        IP_current = GetLocalIPv4(NetworkInterfaceType.Wireless80211);
+                    }
+                }
+                catch
+                {
+                    IP_current = "127.0.0.1";
+                }
+                return IP_current;
+            }
+        }
+        private Thread waitrespond;
+
+        public void ConnectToServer(string IPServer, int Timeout)
         {
             if (!ClientSocket.Connected)
             {
@@ -27,16 +51,29 @@ namespace SkClientMNG
                 catch
                 {
                     IsSKconnected = false;
-                    ExMessage = "Không thể kết nối đến máy chủ!";
-                    ChangeEvent?.Invoke(ExMessage);
-                    return false;
+                    ExMessage = "Cannot connect to server!";
+                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
+                    return;
                 }
             }
-            bool isOK = SendString("ipclient&" + GetIpClient(), Timeout);
+            bool isOK = SendString("ipclient&" + IpClient, Timeout);
             if (isOK)
             {
                 IsSKconnected = true;
-                return true;
+                ExMessage = "Connected!";
+                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.SocketMessage));
+                waitrespond = new Thread(new ThreadStart(() =>
+                {
+                    while (IsSKconnected)
+                    {
+                        ExMessage = ReceiveResponse;
+                        ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerRespond));
+                    }
+                }))
+                {
+                    IsBackground = true
+                };
+                waitrespond.Start();
             }
             else
             {
@@ -46,44 +83,45 @@ namespace SkClientMNG
                     ClientSocket.Close();
                 }
                 catch { }
-                return false;
             }
         }
-        private string GetIpClient()
+        public void Close()
         {
-            string IP_current;
+            IsSKconnected = false;
             try
             {
-                IP_current = GetLocalIPv4(NetworkInterfaceType.Ethernet);
-                if (string.IsNullOrEmpty(IP_current))
-                {
-                    IP_current = GetLocalIPv4(NetworkInterfaceType.Wireless80211);
-                }
+                SendString("exit&" + IpClient, 5000); // Tell the server we are exiting
             }
-            catch
+            catch { }
+            try
             {
-                IP_current = "127.0.0.1";
+                ClientSocket.Close();
             }
-            return IP_current;
+            catch { }
+            ExMessage = "Connect closed!";
+            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.SocketMessage));
+            try
+            {
+                waitrespond.Abort();
+            }
+            catch { }
         }
-        public object RequestLoop(string Text, int Timeout)
+        public bool RequestLoop(string Text, int Timeout)
         {
-            object rcvrq = null;
             try
             {
                 SendString("rcvrq&" + Text, Timeout);
-                rcvrq = ReceiveResponse();
+                return true;
             }
             catch
             {
-                return rcvrq;
+                return false;
             }
-            return rcvrq;
         }
         /// <summary>
         /// Sends a string to the server with ASCII encoding.
         /// </summary>
-        public bool SendString(string Text, int Timeout)
+        private bool SendString(string Text, int Timeout)
         {
             try
             {
@@ -95,8 +133,8 @@ namespace SkClientMNG
                 else
                 {
                     IsSKconnected = false;
-                    ExMessage = "Mất kết nối đến máy chủ!";
-                    ChangeEvent?.Invoke(ExMessage);
+                    ExMessage = "Lost connect from server!";
+                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
                     ClientSocket.Close();
                     return false;
                 }
@@ -104,49 +142,65 @@ namespace SkClientMNG
             catch
             {
                 IsSKconnected = false;
-                ExMessage = "Mất kết nối đến máy chủ!";
-                ChangeEvent?.Invoke(ExMessage);
+                ExMessage = "Lost connect from server!";
+                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
                 ClientSocket.Close();
                 return false;
             }
             return true;
         }
-        public object ReceiveResponse()
+        private object ReceiveResponse
         {
-            object rcvobj = null;
-            var buffer = new byte[1024 * 32000];
-            int received = 0;
-            try
+            get
             {
-                received = ClientSocket.Receive(buffer, SocketFlags.None);
-            }
-            catch
-            {
-                IsSKconnected = false;
-                ExMessage = "Máy chủ không phản hồi!";
-                ChangeEvent?.Invoke(ExMessage);
-                ClientSocket.Close();
+                object rcvobj = null;
+                var buffer = new byte[1024 * 32000];
+                int received = 0;
+                try
+                {
+                    received = ClientSocket.Receive(buffer, SocketFlags.None);
+                }
+                catch
+                {
+                    IsSKconnected = false;
+                    rcvobj = "No respond from server!";
+                    Close();
+                    return rcvobj;
+                }
+                if (received == 0)
+                {
+                    rcvobj = "Data received empty!";
+                    return rcvobj;
+                }
+                var data = new byte[received];
+                Array.Copy(buffer, data, received);
+                object text = DeserializeData(data);
+                if (text == null)
+                {
+                    rcvobj = "Data received empty!";
+                    return rcvobj;
+                }
+                rcvobj = CommandEx(text);
                 return rcvobj;
             }
-            if (received == 0)
+        }
+        private object CommandEx(object command)
+        {
+            string[] cmdarr = command.ToString().Split(new char[] { '&' }, 2);
+            switch (cmdarr.First())
             {
-                ExMessage = "Không có dữ liệu!";
-                ChangeEvent?.Invoke(ExMessage);
-                return rcvobj;
+                case "exit":
+                    {
+                        Close();
+                        break;
+                    }
+                default:
+                    {
+                        ExMessage = command;
+                        break;
+                    }
             }
-            var data = new byte[received];
-            Array.Copy(buffer, data, received);
-            object text = DeserializeData(data);
-            if (text == null)
-            {
-                ExMessage = "Không có dữ liệu!";
-                ChangeEvent?.Invoke(ExMessage);
-                return rcvobj;
-            }
-            rcvobj = text;
-            ExMessage = text;
-            ChangeEvent?.Invoke(ExMessage);
-            return rcvobj;
+            return ExMessage;
         }
         public bool CheckConnected(Socket Socket, int Timeout)
         {
@@ -160,29 +214,7 @@ namespace SkClientMNG
             }
         }
 
-        /// <summary>
-        /// Close socket 
-        /// </summary>
-        /// 
-        public bool Close()
-        {
-            try
-            {
-                SendString("exit&" + GetIpClient(), 5000); // Tell the server we are exiting
-                try
-                {
-                    ClientSocket.Close();
-                }
-                catch { }
-                IsSKconnected = false;
-            }
-            catch
-            {
-                IsSKconnected = false;
-                return false;
-            }
-            return true;
-        }
+
         /// <summary>
         /// Nén đối tượng thành mảng byte[]
         /// </summary>
@@ -258,5 +290,17 @@ namespace SkClientMNG
             return output;
         }
 
+    }
+    public class ModeEventArgs
+    {
+        private int _mode;
+        public int Mode { get => _mode; set => _mode = value; }
+        public ModeEventArgs(int mode) => Mode = mode;
+    }
+    public enum ModeEvent
+    {
+        ServerError,
+        ServerRespond,
+        SocketMessage,
     }
 }
