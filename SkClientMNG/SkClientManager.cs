@@ -67,7 +67,7 @@ namespace SkClientMNG
                 {
                     while (IsSKconnected)
                     {
-                        ExMessage = ReceiveResponse;
+                        ExMessage = GetReceiveResponse();
                         ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerRespond));
                     }
                 }))
@@ -107,35 +107,33 @@ namespace SkClientMNG
             ExMessage = "Connect closed!";
             ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
         }
-        private object ReceiveResponse
+
+        private object GetReceiveResponse()
         {
-            get
+            byte[] buffer = new byte[1024 * 32000];
+            int received = 0;
+            try
             {
-                byte[] buffer = new byte[1024 * 32000];
-                int received = 0;
-                try
-                {
-                    received = ClientSocket.Receive(buffer, SocketFlags.None);
-                }
-                catch
-                {
-                    IsSKconnected = false;
-                    return "No respond from server!";
-                }
-                if (received == 0)
-                {
-                    return "Data received empty!";
-                }
-                var data = new byte[received];
-                Array.Copy(buffer, data, received);
-                object text = null;
-                try
-                {
-                    text = DeserializeData(data);
-                }
-                catch { }
-                return text == null ? "Data received empty!" : CommandEx(text);
+                received = ClientSocket.Receive(buffer, SocketFlags.None);
             }
+            catch
+            {
+                IsSKconnected = false;
+                return "No respond from server!";
+            }
+            if (received == 0)
+            {
+                return "Data received empty!";
+            }
+            var data = new byte[received];
+            Array.Copy(buffer, data, received);
+            object text = null;
+            try
+            {
+                text = DeserializeData(data);
+            }
+            catch { }
+            return text == null ? "Data received empty!" : CommandEx(text);
         }
         private object CommandEx(object command)
         {
@@ -167,10 +165,7 @@ namespace SkClientMNG
                 return command;
             }
         }
-        public bool Send(object Object)
-        {
-               return SendString(new KeyValuePair<TypeSend, object>(TypeSend.Object,Object));
-        }
+        public bool Send(object Object) => SendString(new KeyValuePair<TypeSend, object>(TypeSend.Object, Object));
         private bool SendString(KeyValuePair<TypeSend,object> keyValuePair)
         {
             try
