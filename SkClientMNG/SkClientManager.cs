@@ -19,6 +19,7 @@ namespace SkClientMNG
         public delegate void Changed(object T, ModeEventArgs e);
         public event Changed ChangeEvent;
         private Thread waitrespond;
+        private bool AbortSend = false;
         public object ExMessage { get; private set; }
         public string IpClient
         {
@@ -68,7 +69,10 @@ namespace SkClientMNG
                     while (IsSKconnected)
                     {
                         ExMessage = GetReceiveResponse();
-                        ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerRespond));
+                        if (ExMessage != null)
+                        {
+                            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerRespond));
+                        }
                     }
                 }))
                 {
@@ -91,9 +95,11 @@ namespace SkClientMNG
             IsSKconnected = false;
             try
             {
+                AbortSend = true;
                 SendString(new KeyValuePair<TypeSend, object>(TypeSend.Exit, IpClient));
             }
             catch { }
+            AbortSend = false;
             try
             {
                 ClientSocket.Close();
@@ -118,8 +124,7 @@ namespace SkClientMNG
             }
             catch
             {
-                IsSKconnected = false;
-                return "No respond from server!";
+                return null;
             }
             if (received == 0)
             {
@@ -177,8 +182,11 @@ namespace SkClientMNG
             catch
             {
                 IsSKconnected = false;
-                ExMessage = "Cannot send to server!";
-                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerError));
+                if (!AbortSend)
+                {
+                    ExMessage = "Cannot send to server!";
+                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerError));
+                }
                 return false;
             }
         }
@@ -244,8 +252,8 @@ namespace SkClientMNG
     public class ModeEventArgs
     {
         private ModeEvent _mode;
-        public ModeEvent Mode { get => _mode; set => _mode = value; }
-        public ModeEventArgs(ModeEvent mode) => Mode = mode;
+        public ModeEvent ModeEvent { get => _mode; set => _mode = value; }
+        public ModeEventArgs(ModeEvent mode) => ModeEvent = mode;
     }
     public enum ModeEvent
     {
