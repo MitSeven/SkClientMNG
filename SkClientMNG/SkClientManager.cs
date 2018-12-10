@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -9,7 +9,6 @@ using System.Threading;
 
 namespace SkClientMNG
 {
-    [Serializable]
     public class SkClientManager
     {
         public static Socket ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -53,16 +52,16 @@ namespace SkClientMNG
                 {
                     IsSKconnected = false;
                     ExMessage = "Cannot connect to server!";
-                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
+                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                     return;
                 }
             }
-            bool isOK = SendString("ipclient&" + IpClient, Timeout);
+            bool isOK = SendString(new DictionaryEntry(DataType.IpClient, IpClient));
             if (isOK)
             {
                 IsSKconnected = true;
                 ExMessage = "Connected!";
-                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
+                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                 waitrespond = new Thread(new ThreadStart(() =>
                 {
                     while (IsSKconnected)
@@ -92,7 +91,7 @@ namespace SkClientMNG
             try
             {
                 AbortSend = true;
-                SendString("exit&" + IpClient, 5000); // Tell the server we are exiting
+                SendString(new DictionaryEntry(DataType.Exit, IpClient)); // Tell the server we are exiting
             }
             catch { }
             AbortSend = false;
@@ -102,7 +101,7 @@ namespace SkClientMNG
             }
             catch { }
             ExMessage = "Connect closed!";
-            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
+            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
             try
             {
                 waitrespond.Abort();
@@ -113,7 +112,7 @@ namespace SkClientMNG
         {
             try
             {
-                SendString("rcvrq&" + Text, Timeout);
+                SendString(new DictionaryEntry(DataType.Object, Text));
                 return true;
             }
             catch
@@ -124,26 +123,17 @@ namespace SkClientMNG
         /// <summary>
         /// Sends a string to the server with ASCII encoding.
         /// </summary>
-        private bool SendString(string Text, int Timeout)
+        private bool SendString(DictionaryEntry dictionaryEntry)
         {
+            var dtsend = new DictionaryEntry
+            {
+                Key = (int)dictionaryEntry.Key,
+                Value = dictionaryEntry.Value
+            };
             try
             {
-                if (CheckConnected(ClientSocket, Timeout))
-                {
-                    byte[] buffer = SerializeData(Text);
-                    ClientSocket.Send(buffer, 0, buffer.Length, SocketFlags.None);
-                }
-                else
-                {
-                    IsSKconnected = false;
-                    if (!AbortSend)
-                    {
-                        ExMessage = "Lost connect from server!";
-                        ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
-                    }
-                    ClientSocket.Close();
-                    return false;
-                }
+                byte[] buffer = SerializeData(dtsend);
+                ClientSocket.Send(buffer, 0, buffer.Length, SocketFlags.None);
             }
             catch
             {
@@ -151,7 +141,7 @@ namespace SkClientMNG
                 if (!AbortSend)
                 {
                     ExMessage = "Lost connect from server!";
-                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs((int)ModeEvent.ServerError));
+                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                 }
                 ClientSocket.Close();
                 return false;
@@ -183,10 +173,19 @@ namespace SkClientMNG
                 }
                 var data = new byte[received];
                 Array.Copy(buffer, data, received);
-                object text = DeserializeData(data);
-                if (text == null)
+                object text = "";
+                try
                 {
-                    rcvobj = "Data received empty!";
+                    text = DeserializeData(data);
+                    if (text == null)
+                    {
+                        rcvobj = "Data received empty!";
+                        return rcvobj;
+                    }
+                }
+                catch
+                {
+                    rcvobj = "Data struct false!";
                     return rcvobj;
                 }
                 rcvobj = CommandEx(text);
@@ -195,32 +194,33 @@ namespace SkClientMNG
         }
         private object CommandEx(object command)
         {
-            string[] cmdarr = command.ToString().Split(new char[] { '&' }, 2);
-            switch (cmdarr.First())
-            {
-                case "exit":
-                    {
-                        Close();
-                        break;
-                    }
-                default:
-                    {
-                        ExMessage = command;
-                        break;
-                    }
-            }
-            return ExMessage;
-        }
-        public bool CheckConnected(Socket Socket, int Timeout)
-        {
             try
             {
-                return !(Socket.Poll(Timeout, SelectMode.SelectRead) && Socket.Available == 0);
+                var cmd = (DictionaryEntry)command;
+                var cmdarr = (DataType)cmd.Key;
+                switch (cmdarr)
+                {
+                    case DataType.Exit:
+                        {
+                            Close();
+                            break;
+                        }
+                    case DataType.Object:
+                        {
+                            ExMessage = cmd.Value;
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+                }
             }
-            catch (SocketException)
+            catch
             {
-                return false;
+                ExMessage = command;
             }
+            return ExMessage;
         }
 
 
@@ -308,8 +308,14 @@ namespace SkClientMNG
     }
     public enum ModeEvent
     {
-        ServerError,
         ServerRespond,
-        SocketMessage,
+        SocketError,
+    }
+    public enum DataType
+    {
+        IpClient,
+        Exit,
+        Object,
+        Received,
     }
 }
