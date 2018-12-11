@@ -52,8 +52,8 @@ namespace SkClientMNG
                 catch
                 {
                     IsSKconnected = false;
-                    ExMessage = "Cannot connect to server!";
-                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                    ExMessage = "Cannot connect to server";
+                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
                     return;
                 }
             }
@@ -61,8 +61,8 @@ namespace SkClientMNG
             if (isOK)
             {
                 IsSKconnected = true;
-                ExMessage = "Connected!";
-                ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                ExMessage = "Connected";
+                ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
                 waitrespond = new Thread(new ThreadStart(() =>
                 {
                     while (IsSKconnected)
@@ -100,8 +100,8 @@ namespace SkClientMNG
                 ClientSocket.Close();
             }
             catch { }
-            ExMessage = "Connect closed!";
-            ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+            ExMessage = "Connect closed";
+            ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
             try
             {
                 waitrespond.Abort();
@@ -130,8 +130,8 @@ namespace SkClientMNG
                 IsSKconnected = false;
                 if (!AbortSend)
                 {
-                    ExMessage = "Lost connect from server!";
-                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                    ExMessage = "Lost connect from server";
+                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketMessage));
                 }
                 ClientSocket.Close();
                 return false;
@@ -152,13 +152,13 @@ namespace SkClientMNG
                 catch
                 {
                     IsSKconnected = false;
-                    rcvobj = "No respond from server!";
+                    rcvobj = "No respond from server";
                     Close();
                     return rcvobj;
                 }
                 if (received == 0)
                 {
-                    rcvobj = "Data received empty!";
+                    rcvobj = "Data received empty";
                     return rcvobj;
                 }
                 var data = new byte[received];
@@ -169,13 +169,13 @@ namespace SkClientMNG
                     text = DeserializeData(data);
                     if (text == null)
                     {
-                        rcvobj = "Data received empty!";
+                        rcvobj = "Data received empty";
                         return rcvobj;
                     }
                 }
                 catch
                 {
-                    rcvobj = "Data struct false!";
+                    rcvobj = "Data struct false";
                     return rcvobj;
                 }
                 rcvobj = CommandEx(text);
@@ -299,7 +299,7 @@ namespace SkClientMNG
     public enum ModeEvent
     {
         ServerRespond,
-        SocketError,
+        SocketMessage,
     }
     public enum DataType
     {
