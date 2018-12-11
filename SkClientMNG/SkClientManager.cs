@@ -39,7 +39,7 @@ namespace SkClientMNG
         }
         private Thread waitrespond;
 
-        public void ConnectToServer(string IPServer, int Timeout)
+        public void ConnectToServer(string IPServer)
         {
             if (!ClientSocket.Connected)
             {
