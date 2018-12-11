@@ -46,6 +46,7 @@ namespace SkClientMNG
                 ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 try
                 {
+                    AbortSend = false;
                     ClientSocket.Connect(IPAddress.Parse(IPServer), 777);
                 }
                 catch
@@ -94,7 +95,6 @@ namespace SkClientMNG
                 SendString(new DictionaryEntry(DataType.Exit, IpClient)); // Tell the server we are exiting
             }
             catch { }
-            AbortSend = false;
             try
             {
                 ClientSocket.Close();
