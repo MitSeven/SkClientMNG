@@ -108,18 +108,8 @@ namespace SkClientMNG
             }
             catch { }
         }
-        public bool Send(string Text, int Timeout)
-        {
-            try
-            {
-                SendString(new DictionaryEntry(DataType.Object, Text));
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        public bool Send(object Object) => SendString(new DictionaryEntry(DataType.Object, Object));
+
         /// <summary>
         /// Sends a string to the server with ASCII encoding.
         /// </summary>
