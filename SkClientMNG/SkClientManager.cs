@@ -14,7 +14,7 @@ namespace SkClientMNG
         public static Socket ClientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         public bool IsSKconnected { get; private set; } = false;
         public delegate void Changed(object T, ModeEventArgs e);
-        public event Changed ChangeEvent;
+        public event Changed ReceivedEvent;
         private bool AbortSend = false;
         public object ExMessage { get; private set; }
         public string IpClient
@@ -52,7 +52,7 @@ namespace SkClientMNG
                 {
                     IsSKconnected = false;
                     ExMessage = "Cannot connect to server!";
-                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                     return;
                 }
             }
@@ -61,13 +61,13 @@ namespace SkClientMNG
             {
                 IsSKconnected = true;
                 ExMessage = "Connected!";
-                ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                 waitrespond = new Thread(new ThreadStart(() =>
                 {
                     while (IsSKconnected)
                     {
                         ExMessage = ReceiveResponse;
-                        ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerRespond));
+                        ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.ServerRespond));
                     }
                 }))
                 {
@@ -101,7 +101,7 @@ namespace SkClientMNG
             }
             catch { }
             ExMessage = "Connect closed!";
-            ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+            ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
             try
             {
                 waitrespond.Abort();
@@ -141,7 +141,7 @@ namespace SkClientMNG
                 if (!AbortSend)
                 {
                     ExMessage = "Lost connect from server!";
-                    ChangeEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
+                    ReceivedEvent?.Invoke(ExMessage, new ModeEventArgs(ModeEvent.SocketError));
                 }
                 ClientSocket.Close();
                 return false;
